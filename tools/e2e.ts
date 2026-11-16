@@ -260,6 +260,26 @@ async function run(viewport: { width: number; height: number }, tag: string) {
   const spaceOff = await page.getByRole("button", { name: /^Play beat$/ }).count();
   logs.push(`[${tag}] beatbox space: playing ${spaceOn}, stopped ${spaceOff}`);
   if (spaceOn !== 1 || spaceOff !== 1) errors.push(`[${tag}] Space didn't start and stop the beat (${spaceOn}, ${spaceOff})`);
+  // register: a short stretch of an /i/ sweep sounds, then leaving the tab ends its breath
+  await page.getByRole("radio", { name: "Register" }).click();
+  await page.getByRole("group", { name: "Vowel" }).getByRole("button", { name: "i" }).click();
+  await page.getByRole("button", { name: /^Sweep$/ }).click();
+  await page.waitForTimeout(2500);
+  const sweep = await page.evaluate(() => ({
+    pitch: document.querySelector('[data-readout="Pitch (engine)"]')?.textContent,
+    oq: document.querySelector('[data-readout="Open quotient (measured)"]')?.textContent,
+    stop: !!Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Stop"),
+  }));
+  await page.screenshot({ path: `${outDir}/${tag}-6-register.png`, fullPage: true });
+  logs.push(`[${tag}] register sweep: ${JSON.stringify(sweep)}`);
+  if (!sweep.stop || !sweep.pitch || sweep.pitch === "-") errors.push(`[${tag}] the register sweep didn't sound: ${JSON.stringify(sweep)}`);
+  await page.getByRole("radio", { name: "Beatbox" }).click();
+  await page.waitForTimeout(800);
+  const gate = await page.evaluate(() => {
+    // @ts-expect-error debug handle
+    return window.__chimeraEngine?.latest?.t.gate as number | undefined;
+  });
+  if (!(gate !== undefined && gate < 0.05)) errors.push(`[${tag}] leaving Register left the breath on (gate ${gate})`);
   // back to the human voice
   await page.getByRole("radio", { name: "Play" }).click();
   await page.waitForTimeout(600);
@@ -599,6 +619,6 @@ await run({ width: 1440, height: 980 }, "desktop");
 await run({ width: 390, height: 844 }, "mobile");
 await browser.close();
 console.log("console errors:", errors.length ? "\n" + errors.join("\n") : "none");
-console.log(logs.filter((l) => /load|rate|warn|transcription|example|creature|held|back to|beatbox|silence|sing|octave|retry|tongue|song|video/i.test(l)).slice(0, 52).join("\n"));
+console.log(logs.filter((l) => /load|rate|warn|transcription|example|creature|held|back to|beatbox|silence|sing|octave|retry|tongue|song|video|register/i.test(l)).slice(0, 56).join("\n"));
 // a run that collected errors fails, so CI and agents can't read it as a pass
 if (errors.length) process.exit(1);

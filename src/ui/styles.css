@@ -2056,6 +2056,82 @@ input[type="range"]::-moz-range-thumb {
   }
 }
 
+/* ---------- Register */
+.right-register {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto minmax(min-content, 220fr) minmax(min-content, 230fr) auto minmax(min-content, 130fr);
+  grid-template-areas: "act act" "lat cor" "sweep sweep" "read read" "folds folds";
+}
+
+.s-lat { grid-area: lat; }
+.s-cor { grid-area: cor; }
+.s-sweep { grid-area: sweep; }
+.s-read { grid-area: read; }
+
+.right-register .s-read .screen-body {
+  min-height: 0;
+}
+
+.right-register .s-folds .screen-body {
+  min-height: 96px;
+}
+
+.reg-read {
+  padding: 2px 12px 10px;
+}
+
+.reg-read dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.reg-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reg-row dt {
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.reg-row dd {
+  margin: 0;
+  color: var(--amber);
+  font-size: 14px;
+}
+
+.reg-note {
+  margin: 10px 0 0;
+  color: var(--pink);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+@media (max-width: 1100px) {
+  .right-register {
+    grid-template-rows: none;
+  }
+  .right-register .screen-body {
+    min-height: 200px;
+  }
+  .right-register .s-read .screen-body {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .right-register {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "act" "lat" "cor" "sweep" "read" "folds";
+  }
+}
+
 /* ---------- Sing */
 /* the words right under the button that sings them; the pitch roll only shows what was sung: a
    smaller share than it had, so the song's button fits a 1280 x 800 window and the keys keep

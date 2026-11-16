@@ -38,6 +38,11 @@ for tests and the `chimera` CLI.
   ([docs/language-front-ends.md](docs/language-front-ends.md)).
 - **Beatbox**: pads and a step sequencer, every drum an articulatory gesture.
 - **Bestiary**: songbird (two-voice syrinx), seal, alligator and elephant.
+- **Register**: a pitch sweep on a, e, i, o or u from chest voice (M1) into head voice (M2), as an
+  untrained voice that breaks or a trained one that blends, with the mouth opening to keep F1
+  above the pitch. The larynx from the side, the folds in section and from above, and the sweep
+  chart show it; pitch, glottal opening, open quotient, H1-H2, jaw and larynx are measured from the
+  voice, and the muscles and the folds' shape are drawn as labelled schematics.
 - **Duet** (`?show=<id>`): two 3D heads replay a pre-rendered song.
 
 Male, female and child bodies blend continuously. Everything on screen animates from live
