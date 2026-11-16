@@ -8,9 +8,10 @@ import type { ParamDef } from "../wasm/types.ts";
 import { BEAT_PRESETS, BASS_NOTE, beatReady, parseBeat, type BeatStep } from "../wasm/engine.ts";
 import { singNoteOn, singNoteOff, stopSinging } from "./singing.ts";
 import { stopSpeaking } from "./speech.ts";
+import { stopSweep } from "./register/sweep.ts";
 import { connectMidi, disconnectMidi, type MidiStatus } from "./midi.ts";
 
-export type Mode = "play" | "speak" | "sing" | "bestiary" | "beatbox";
+export type Mode = "play" | "speak" | "sing" | "bestiary" | "beatbox" | "register";
 
 export interface BeatState {
   steps: (BeatStep | null)[];
@@ -102,8 +103,8 @@ export function creatureKeyHz(midi: number, p: Pick<ParamDef, "min" | "max">): n
 }
 
 function updateGate(s: { hold: boolean; heldNotes: number[]; mode: Mode; keyCall: string | null }) {
-  // keys that trigger calls leave the breath to the call; sung notes breathe by themselves
-  const keysBreathe = !(s.mode === "bestiary" && s.keyCall) && s.mode !== "sing";
+  // keys that trigger calls leave the breath to the call; sung notes and sweeps breathe by themselves
+  const keysBreathe = !(s.mode === "bestiary" && s.keyCall) && s.mode !== "sing" && s.mode !== "register";
   engine.gate(s.hold || (keysBreathe && s.heldNotes.length > 0) ? 1 : 0);
 }
 
@@ -173,8 +174,10 @@ export const useStore = create<State>((set, get) => ({
       poseBeforeBeat = null;
     }
     if (prev === "sing") stopSinging();
-    // speech and song breathe by themselves: a held breath would drone under them
-    if (m === "speak" || m === "sing") set({ hold: false });
+    // a sweep's head voice and posture end with it, so no other tab inherits them
+    if (prev === "register") stopSweep();
+    // speech, song and sweeps breathe by themselves: a held breath would drone under them
+    if (m === "speak" || m === "sing" || m === "register") set({ hold: false });
     if (m === "beatbox") {
       // a beatboxer waits with the jaw nearly closed; the sounds bring their own breath
       set({ hold: false });
@@ -323,6 +326,8 @@ export const useStore = create<State>((set, get) => ({
     if (!get().started) get().setHold(false);
   },
   noteOn: (midi, velocity = 96) => {
+    // the sweep sets the pitch and the breath; a MIDI key would cut into it
+    if (get().mode === "register") return;
     const held = get().heldNotes.filter((n) => n !== midi).concat(midi);
     set({ heldNotes: held });
     const s = get();

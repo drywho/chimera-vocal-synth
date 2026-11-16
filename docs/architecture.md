@@ -74,7 +74,10 @@ branching (nasal tract, sinuses, piriform fossae, two bronchi, vocal sacs, OEC).
   interactive glottal branch, so flow shape, skewing, F1 ripple and devoicing under
   oral closure all emerge from the tract. Perturbations: jitter, shimmer, vibrato with
   drift, 1/f flutter, diplophonia/period doubling, vocal fry (low f0, short OQ, double
-  pulses), falsetto (sinusoidal, incomplete closure).
+  pulses). **Register** (`VoiceSource.register`, 0 chest/M1 … 1 head/M2) blends the human
+  voice's pulse toward head voice: a longer open phase, no abrupt closure, a smaller excursion
+  and a wider posterior chink. It is an authored blend of pulse targets, smoothed over 8 ms;
+  the folds' mechanics (thinning, the CT/TA balance) are not simulated.
 * **Two-mass vocal folds (advanced)**: Ishizaka–Flanagan with collision; self-oscillating;
   pitch tracked by a feedback controller on the tension factor Q.
 * **Ventricular folds**: second valve above the glottis, entrains at f0/2 for growl /
