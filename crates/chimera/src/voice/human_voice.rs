@@ -40,13 +40,18 @@ pub struct VoiceSource {
     /// the model can, so there is little room to darken and a lot to brighten.
     #[serde(default = "default_brightness")]
     pub brightness: f64,
+    /// 0 chest (mechanism M1) … 1 head (M2): the folds vibrate thin and stretched, with a longer
+    /// open phase, a softer closure and a wider posterior gap. An authored blend of glottal pulse
+    /// targets, not a simulated change in the folds' mechanics.
+    #[serde(default)]
+    pub register: f64,
 }
 
 fn default_brightness() -> f64 {
     DEFAULT_SOURCE.brightness
 }
 
-pub const DEFAULT_SOURCE: VoiceSource = VoiceSource { f0: 110.0, glide: 0.06, pressure: 8.0, breathiness: 0.15, tension: 0.5, fry: 0.0, roughness: 0.1, vibrato_depth: 0.0, vibrato_rate: 6.0, drift: 5.0, voiced: true, brightness: 0.25 };
+pub const DEFAULT_SOURCE: VoiceSource = VoiceSource { f0: 110.0, glide: 0.06, pressure: 8.0, breathiness: 0.15, tension: 0.5, fry: 0.0, roughness: 0.1, vibrato_depth: 0.0, vibrato_rate: 6.0, drift: 5.0, voiced: true, brightness: 0.25, register: 0.0 };
 
 /// `Partial<VoiceSource>`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -76,6 +81,8 @@ pub struct SourcePatch {
     pub voiced: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub brightness: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub register: Option<f64>,
 }
 
 impl SourcePatch {
@@ -87,13 +94,13 @@ impl SourcePatch {
         macro_rules! set {
             ($($f:ident),*) => { $( if let Some(x) = self.$f { s.$f = x; } )* };
         }
-        set!(f0, glide, pressure, breathiness, tension, fry, roughness, vibrato_depth, vibrato_rate, drift, voiced, brightness);
+        set!(f0, glide, pressure, breathiness, tension, fry, roughness, vibrato_depth, vibrato_rate, drift, voiced, brightness, register);
     }
     pub fn merge(&mut self, o: &SourcePatch) {
         macro_rules! set {
             ($($f:ident),*) => { $( if o.$f.is_some() { self.$f = o.$f; } )* };
         }
-        set!(f0, glide, pressure, breathiness, tension, fry, roughness, vibrato_depth, vibrato_rate, drift, voiced, brightness);
+        set!(f0, glide, pressure, breathiness, tension, fry, roughness, vibrato_depth, vibrato_rate, drift, voiced, brightness, register);
     }
     pub fn from_source(s: &VoiceSource) -> Self {
         SourcePatch {
@@ -109,6 +116,7 @@ impl SourcePatch {
             drift: Some(s.drift),
             voiced: Some(s.voiced),
             brightness: Some(s.brightness),
+            register: Some(s.register),
         }
     }
 }
@@ -196,6 +204,18 @@ pub struct HumanVoice {
     lim_release: f64,
     /// tissue may compress this far (cm) before the palate stops the articulator
     pub max_penetration: f64,
+    reg_base: RegBase,
+    register_sm: f64,
+}
+
+/// The glottal pulse settings `apply_source` gives in chest voice, before the register blends them.
+#[derive(Clone, Copy, Debug, Default)]
+struct RegBase {
+    oq: f64,
+    sharp: f64,
+    skew: f64,
+    amp: f64,
+    chink: f64,
 }
 
 /// How many times the airway is oversampled at this output rate: the smallest factor that puts
@@ -259,6 +279,8 @@ impl HumanVoice {
             lim_hold_n: crate::math::js_round(0.025 * fs_out) as i64,
             lim_release: exp(-1.0 / (0.2 * fs_out)),
             max_penetration: 0.1,
+            reg_base: RegBase::default(),
+            register_sm: 0.0,
         };
         let x = v.artic.x;
         v.airway.apply(&x, 0.0);
@@ -318,15 +340,15 @@ impl HumanVoice {
         let s = self.source;
         let g = &mut self.glottis.params;
         let k2 = self.airway.body.scale * self.airway.body.scale;
-        g.amplitude = 0.17 * k2 * (if s.voiced { 1.0 } else { 0.0 });
+        let amp = 0.17 * k2 * (if s.voiced { 1.0 } else { 0.0 });
         g.abduction = (if s.voiced { 0.1 * s.breathiness * s.breathiness } else { 0.2 + 0.1 * s.breathiness }) * k2;
         self.base_abduction = g.abduction;
         self.base_closure = 0.0;
         // Most voices, women's and trained singers' included, leave a small posterior gap between
         // the arytenoids through the closed phase (Södersten & Lindestad 1990). It leaks a little
         // air and damps the tract, which lifts H1 and the band below 500 Hz.
-        g.chink = (0.008 + 0.03 * s.breathiness) * k2;
-        g.open_quotient = 0.78 - 0.36 * s.tension;
+        let chink = (0.008 + 0.03 * s.breathiness) * k2;
+        let oq = 0.78 - 0.36 * s.tension;
         // The folds close along their length and depth over a return phase, not all at once, so
         // a sung or spoken voice closes softly (0.22 at tension 0.55): an abrupt closure put
         // 3-8 dB too much energy above 2 kHz. Pressing harder than that brings the abrupt closure
@@ -335,8 +357,8 @@ impl HumanVoice {
         // the model allows, 1 about as abruptly as a pressed voice.
         let bright = s.brightness - DEFAULT_SOURCE.brightness;
         let by_tension = 0.4 * s.tension + 1.375 * js_max(0.0, s.tension - 0.6);
-        g.closure_sharpness = clamp(by_tension + 0.8 * bright, 0.0, 1.0);
-        g.skew = 0.56 + 0.16 * s.tension + 0.2 * bright;
+        let sharp = clamp(by_tension + 0.8 * bright, 0.0, 1.0);
+        let skew = 0.56 + 0.16 * s.tension + 0.2 * bright;
         g.fry = s.fry;
         // Jitter of a healthy, trained voice at the default roughness (0.1): about 0.45 %, well
         // under the clinical threshold (MDVP: 1.04 %).
@@ -347,6 +369,25 @@ impl HumanVoice {
         g.vibrato_rate = s.vibrato_rate;
         g.drift = s.drift;
         g.effort = clamp((s.pressure.abs() - 3.0) / 10.0, 0.0, 1.0);
+        self.reg_base = RegBase { oq, sharp, skew, amp, chink };
+        self.apply_register();
+    }
+
+    /// Blend the chest-voice pulse toward head voice by the smoothed register. At 0 every value is
+    /// the chest one exactly (`a + (b - a) * 0.0 == a`), so voices that never set it are unchanged.
+    /// Head voice (Henrich et al. 2005, JASA 117): a longer open phase, a closure soft enough that
+    /// H1 dominates, a narrower excursion of the thinner folds, and more posterior leakage.
+    fn apply_register(&mut self) {
+        let b = self.reg_base;
+        let r = self.register_sm;
+        let k2 = self.airway.body.scale * self.airway.body.scale;
+        let g = &mut self.glottis.params;
+        let lerp = |m1: f64, m2: f64| m1 + (m2 - m1) * r;
+        g.open_quotient = lerp(b.oq, 0.90 - 0.10 * self.source.tension);
+        g.closure_sharpness = lerp(b.sharp, 0.0);
+        g.skew = lerp(b.skew, 0.52);
+        g.amplitude = lerp(b.amp, 0.6 * b.amp);
+        g.chink = lerp(b.chink, b.chink + 0.025 * k2);
     }
 
     /// Render `out.len()` output samples.
@@ -518,6 +559,14 @@ impl HumanVoice {
         let g = js_max(0.002, if self.score_f0.is_some() { 0.03 } else { self.source.glide });
         self.f0 *= pow(f0_target / self.f0, 1.0 - exp(-dt / g));
         self.glottis.params.f0 = self.f0;
+        if self.register_sm != self.source.register {
+            let goal = self.source.register;
+            self.register_sm += (goal - self.register_sm) * (1.0 - exp(-dt / 0.008));
+            if (goal - self.register_sm).abs() < 1e-6 {
+                self.register_sm = goal;
+            }
+            self.apply_register();
+        }
         // smoothed mean flow per tract node (for particle speeds)
         let a = 1.0 - exp(-dt / 0.03);
         let n_ph = self.airway.n_ph;
